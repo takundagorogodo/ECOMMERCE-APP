@@ -37,8 +37,8 @@ const cartSchema = new mongoose.Schema(
                   min:0
             },
             isCheckedOut:{
-                  type:Booleann,
-                  dafault
+                  type:Boolean,
+                  default:true
             },
       },
       {timestamps:true}

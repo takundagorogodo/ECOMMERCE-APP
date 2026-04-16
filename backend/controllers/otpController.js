@@ -154,8 +154,6 @@ export const verifyOtp = async (req, res) => {
   }
 };
 
-
-
 export const completeRegistration = async (req,res)=>{
       try {
             const { 

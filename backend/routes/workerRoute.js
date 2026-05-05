@@ -8,8 +8,7 @@ const router =express.Router();
 
 router.post("/create",authenticate,allowRoles("admin"),createWorker);
 router.patch("/update",authenticate,allowRoles("worker"),updateWorkerByWorker);
-router.put("/delete",authenticate,allowRoles("admin"),deleteWorkerByAdmin);
+router.delete("/delete",authenticate,allowRoles("admin"),deleteWorkerByAdmin);
 router.patch("/admin/update",authenticate,allowRoles("admin"),updateWorkerByAdmin);
-
 
 export default router;

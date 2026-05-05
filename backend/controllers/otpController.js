@@ -18,20 +18,19 @@ export const sendOtp = async(req,res)=>{
 
             if(email){
                   const existingUser = await User.findOne({email});
-                  if(existingUser){
+                  if(existingUser && existingUser.password){
                         return res.status(400).json({
-                              message:"Email already registered",
+                              message:"Email already registered. Please login.",
                               success:false
                         });
                   }
-
             }
 
             if(phone){
                   const existingUser = await User.findOne({phone});
-                  if(existingUser){
+                  if(existingUser && existingUser.password){
                         return res.status(400).json({
-                              message:"phone already registred",
+                              message:"Phone already registered. Please login.",
                               success:false
                         });
                   }
@@ -39,13 +38,9 @@ export const sendOtp = async(req,res)=>{
            
              const otp = crypto.randomInt(100000,999999).toString();
 
-            if(email){
-                  await OTP.deleteMany({email});
-            }
-
-            if(phone){
-                  await OTP.deleteMany({phone});
-            }
+            // always replace old OTP for same identifier
+            if(email) await OTP.deleteMany({email});
+            if(phone) await OTP.deleteMany({phone});
 
            const otpData = new OTP({
              email:email || undefined,
@@ -83,12 +78,10 @@ export const verifyOtp = async (req, res) => {
     }
 
     let otpRecord;
-
-    // 🔥 FIX: Compare as STRING (same as stored)
     if (email) {
-      otpRecord = await OTP.findOne({ email, otp });
+      otpRecord = await OTP.findOne({ email, otp }).sort({ createdAt: -1 });
     } else if (phone) {
-      otpRecord = await OTP.findOne({ phone, otp });
+      otpRecord = await OTP.findOne({ phone, otp }).sort({ createdAt: -1 });
     } else {
       return res.status(400).json({
         success: false,
@@ -114,12 +107,16 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
-    // 🔥 Prevent duplicate user creation
-    let user;
-    if (email) {
-      otpRecord = await OTP.findOne({ email, otp }).sort({ createdAt: -1 });
-    } else if (phone) {
-      otpRecord = await OTP.findOne({ phone, otp }).sort({ createdAt: -1 });
+    let user = email
+      ? await User.findOne({ email })
+      : await User.findOne({ phone });
+
+    if (user && user.password) {
+      await OTP.deleteOne({ _id: otpRecord._id });
+      return res.status(400).json({
+        success: false,
+        message: "Account already completed. Please login.",
+      });
     }
 
     if (!user) {
@@ -128,6 +125,9 @@ export const verifyOtp = async (req, res) => {
         phone: phone || undefined,
         isVerified: true,
       });
+    } else if (!user.isVerified) {
+      user.isVerified = true;
+      await user.save();
     }
     
     const token = jwt.sign(
@@ -165,7 +165,7 @@ export const completeRegistration = async (req,res)=>{
                   address
             } = req.body;
             
-            const userId = req.userId;
+            const userId = req.user?._id;
             
             let user = await User.findById(userId);
 
@@ -173,6 +173,13 @@ export const completeRegistration = async (req,res)=>{
                   return res.status(400).json({
                         success:false,
                         message:"verify otp first"
+                  });
+            }
+
+            if(user.password){
+                  return res.status(400).json({
+                        success:false,
+                        message:"Registration already completed. Please login."
                   });
             }
 
@@ -196,7 +203,7 @@ export const completeRegistration = async (req,res)=>{
                   });
             }
             
-            const hashedPassword = await bcrypt.hash(password,Number(process.env.HASH_KEY));
+            const hashedPassword = await bcrypt.hash(password,Number(process.env.HASH_KEY) || 10);
            
             user = await User.findByIdAndUpdate(userId,
                   {

@@ -1,6 +1,7 @@
 import Review from "../models/ReviewModel.js";
 import Product from "../models/ProductModel.js";
 import Order from "../models/OrderModel.js";
+import mongoose from "mongoose";
 
 export const createReview = async(req,res)=>{
       try {
@@ -14,7 +15,7 @@ export const createReview = async(req,res)=>{
             });
             }
 
-            const {productId,rating,title,cooment} = req.body;
+            const { productId, rating, title, comment } = req.body;
 
             if(!productId || !rating){
                   return  res.status(400).json({
@@ -68,6 +69,12 @@ export const createReview = async(req,res)=>{
                   rating,
                   title:title || "",
                   isVerifiedPurchase: !!verifiedorder,
+                  comment: comment || ""
+            });
+
+            res.status(201).json({
+                  success:true,
+                  message:"review created successfully",
                   review
             });
       } catch (error) {
@@ -92,7 +99,7 @@ export const getProductReviews = async(req,res)=>{
                   page=1,
                   limit = 10,
                   sortBy="createdAt",
-                  order=desc,
+                  order="desc",
                   rating
             } = req.query;
 
@@ -111,7 +118,7 @@ export const getProductReviews = async(req,res)=>{
                         filter.rating = parsedrating
                   }
             }
-            const {reviews,total} = await Promise.all([
+            const [reviews,total] = await Promise.all([
                   Review.find(filter)
                     .populate("user","firstName lastName")
                     .sort({[sortBy]:sortOrder})
@@ -121,7 +128,7 @@ export const getProductReviews = async(req,res)=>{
             ]);
 
             const ratingBreakDown = await Review.aggregate([
-                  {$match :{product: productId , isDeleted:false}},
+                  {$match :{product: new mongoose.Types.ObjectId(productId), isDeleted:false}},
                   {
                         $group:{
                               _id:"$rating",
@@ -132,7 +139,7 @@ export const getProductReviews = async(req,res)=>{
 
             const breakdown = { 1: 0,2 : 0,3 : 0,4 : 0,5:0};
             ratingBreakDown.forEach((r) =>{
-                  breakdown[r , _id] = r.count;
+                  breakdown[r._id] = r.count;
             });
 
             res.status(200).json({
@@ -155,7 +162,7 @@ export const getProductReviews = async(req,res)=>{
 export const getUserReviews = async(req,res)=>{
       try {
             
-            const userId = req.userId;
+            const userId = req.user._id;
 
             const {page = 1 , limit =10} =req.query;
 
@@ -181,7 +188,7 @@ export const getUserReviews = async(req,res)=>{
             
       } catch (error) {
             console.error("getUserReviews error : ",error);
-            return  res.status(400).json({
+            return  res.status(500).json({
                   success:false,
                   message:"failed to fetch user reviews"
             });
@@ -277,7 +284,8 @@ export const deleteReview = async (req, res) => {
       });
     }
  
-    await Review.findOneAndDelete({ _id: reviewId });
+    review.isDeleted = true;
+    await review.save();
  
     res.status(200).json({
       success: true,

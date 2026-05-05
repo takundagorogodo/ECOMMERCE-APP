@@ -1,10 +1,15 @@
 import express from "express";
-import { updateOrderStatus } from "../controllers/orderController.js";
+import { cancelOrder, createOrder, getAllOrders, getOrder, getUserOrders, updateOrderStatus } from "../controllers/orderController.js";
 import { authenticate } from "../middlewares/authMiddleware.js";
 import { allowRoles } from "../middlewares/roleMiddleware.js";
 
 const router = express.Router();
 
-router.put("/order-status", authenticate ,allowRoles("worker"),updateOrderStatus);
+router.post("/create",authenticate,allowRoles("customer"),createOrder);
+router.get("/my-orders",authenticate,allowRoles("customer"),getUserOrders);
+router.get("/:orderId",authenticate,getOrder);
+router.get("/",authenticate,allowRoles("customer","worker"),getAllOrders);
+router.patch("/update-status",authenticate,allowRoles("customer","worker"),updateOrderStatus);
+router.patch("/cancel/:orderId",authenticate,allowRoles("customer","admin","worker"),cancelOrder);
 
 export default router

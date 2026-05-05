@@ -331,9 +331,9 @@ export const cancelOrder = async (req, res) => {
     }
 
     const isOwner = order.user.toString() === userId.toString();
-    const isAdmin = userRole === "admin";
+    const isAdminOrWorker = ["admin", "worker"].includes(userRole);
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdminOrWorker) {
       return res.status(403).json({
         success: false,
         message: "You are not authorized to cancel this order",
@@ -343,7 +343,7 @@ export const cancelOrder = async (req, res) => {
     const cancellableByCustomer = ["pending"];
     const cancellableByAdmin    = ["pending", "confirmed"];
 
-    const cancellable = isAdmin ? cancellableByAdmin : cancellableByCustomer;
+    const cancellable = isAdminOrWorker ? cancellableByAdmin : cancellableByCustomer;
 
     if (!cancellable.includes(order.status)) {
       return res.status(400).json({

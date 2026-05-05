@@ -1,84 +1,72 @@
-import Product from "../models/InventoryModel.js";
+import Product from "../models/ProductModel.js";
 import Inventory from "../models/InventoryModel.js";
 import Notification from "../models/NotificationModel.js";
+import User from "../models/UserModel.js";
 
-export const createInventory = async(req,res)=>{
-      try {
-           const adminId = req.user._id;
-           
-           const { productId,currentStock,lowStockThreshold} = req.body;
-            
-           if(adminId){
-            return  res.status(500).json({
-                  success:false,
-                  message:"failed to create inventory"
-            });
-           }
-           if(!productId){
-               return  res.status(500).json({
-                  success:false,
-                  message:"product is is required"
-            });
-           }
+export const createInventory = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { productId, currentStock, lowStockThreshold = 10 } = req.body;
 
-           if(currentStock === undefined ||currentStock<0){
-            return  res.status(400).json({
-                  success:false,
-                  message:"invalid initial stock quantity"
-            });
-           }
+    if (!productId || currentStock === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "productId and currentStock are required",
+      });
+    }
 
-           const product = await Product.findOne({
-            _id:productId,
-            isDeleted:false
-           });
+    if (currentStock < 0 || lowStockThreshold < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Stock values cannot be negative",
+      });
+    }
 
-           if(!product){
-            return  res.status(404).json({
-                  success:false,
-                  message:"product not found"
-            });
-           }
+    const product = await Product.findOne({ _id: productId, isDeleted: false });
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
 
-           const existing = await Inventory.findOne({product:productId});
+    const existing = await Inventory.findOne({ product: productId });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Inventory already exists for this product",
+      });
+    }
 
-           if(existing){
-            return  res.status(400).json({
-                  success:false,
-                  message:"inventory record for this product exists for this product"
-            });
-           }
+    const inventory = await Inventory.create({
+      product: productId,
+      currentStock,
+      lowStockThreshold,
+      updatedBy: userId,
+      movements: [
+        {
+          type: "restock",
+          quantity: currentStock,
+          note: "Initial stock setup",
+          performedBy: userId,
+        },
+      ],
+    });
 
-           const inventory = new Inventory({
-            product:productId,
-            currentStock,
-            lowStockThreshold:lowStockThreshold ||0,
-            updatedBy:adminId,
-            movements:[{
-                  type:"restock",
-                  quantity:currentStock,
-                  note:"initial stock setup",
-                  performedBy:adminId
-                },
-             ],
-           });
+    await inventory.populate("product", "name category price");
 
-           await inventory.save();
-
-           await inventory.populate("product","name category price");
-
-           res.status(201).json({
-            success:true,
-            message:"Inventory created successfully"
-           });
-
-      } catch (error) {
-            console.log("CreateInventory Error",error)
-            res.status(500).json({
-                  success:false,
-                  message:"failed to create inventory"
-            });
-      }
+    res.status(201).json({
+      success: true,
+      message: "Inventory created successfully",
+      inventory,
+    });
+  } catch (error) {
+    console.error("CreateInventory Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create inventory",
+    });
+  }
 };
 
 export const getInventory = async(req,res)=>{
@@ -92,14 +80,6 @@ export const getInventory = async(req,res)=>{
             });
             }
 
-            const user = await User.findById(userId);
-
-            if(!user){
-                  return  res.status(404).json({
-                  success:false,
-                  message:"user not found"
-            });
-            }
             const {productId} = req.params;
 
             const inventory = await Inventory.findOne({product:productId}).populate(
@@ -146,14 +126,6 @@ export const getAllInventory = async(req,res)=>{
             });
             }
 
-            const user = await User.findById(userId);
-
-            if(!user){
-                  return  res.status(404).json({
-                  success:false,
-                  message:"user not found"
-            });
-            }
             const {
                   page =1,
                   limit = 20,
@@ -203,15 +175,6 @@ export const updateStock = async(req,res)=>{
              });
             }
 
-            const user = await User.findById(performedBy);
-
-            if(!user){
-                  return  res.status(404).json({
-                  success:false,
-                  message:"user not found"
-             });
-            }
-
             const {productId ,type,quantity ,note} = req.body;
 
             if(!productId || !type || quantity === undefined){
@@ -221,8 +184,8 @@ export const updateStock = async(req,res)=>{
               });
             }
 
-            if(quantity ===0){
-                  return  res.status(500).json({
+            if(quantity === 0){
+                  return  res.status(400).json({
                   success:false,
                   message:"quantity cannot be zero"
               });
@@ -241,7 +204,7 @@ export const updateStock = async(req,res)=>{
             if(stockRemovingTypes.includes(type)&& inventory.currentStock < quantity){
                   return  res.status(400).json({
                   success:false,
-                  message:`insufficient stock.Current stock is ${inventory.inventory}`
+                  message:`insufficient stock. Current stock is ${inventory.currentStock}`
             });
             }
 
@@ -256,7 +219,7 @@ export const updateStock = async(req,res)=>{
             const newStock  = inventory.currentStock + stockChanges[type];
             
             if(newStock < 0){
-                  return  res.status(500).json({
+                  return  res.status(400).json({
                   success:false,
                   message:`This adjustment results in negative stock (${newStock}). Current stock is ${inventory.currentStock}`
             });
@@ -278,11 +241,11 @@ export const updateStock = async(req,res)=>{
                   const product = await Product.findById(productId).select("name");
                   
                   const notificationData = {
-                      type: inventory.isOutOfStock ? "out_of_stock" : "low_stock",
-                       title: inventory.isOutOfStock
+                      type: inventory.isoutOfStock ? "out_of_stock" : "low_stock",
+                       title: inventory.isoutOfStock
                        ? `${product.name} is out of stock`
                        : `${product.name} is running low`,
-                       message: inventory.isOutOfStock
+                       message: inventory.isoutOfStock
                        ? `${product.name} has 0 units remaining. Please restock immediately.`
                        : `${product.name} has only ${inventory.currentStock} unit(s) left (threshold: ${inventory.lowStockThreshold}).`,
                        reference: {
@@ -291,7 +254,6 @@ export const updateStock = async(req,res)=>{
                          },
                    };
                    
-                   const User = (await import("../models/UserModel.js")).default;
                    const staffUsers = await User.find({
                         role:{$in:["admin","worker"]},
                         isDeleted:false,
@@ -334,15 +296,6 @@ export const getLowStock = async (req, res) => {
             });
             }
 
-            const user = await User.findById(userId);
-
-            if(!user){
-                  return  res.status(404).json({
-                  success:false,
-                  message:"user not found"
-            });
-            }
-
             const lowStock = await Inventory.find({ isLowStock: true })
                   .populate("product", "name category price images")
                   .populate("updatedBy", "firstName lastName")
@@ -375,28 +328,7 @@ export const getOutOfStock = async (req, res) => {
             });
             }
 
-            const user = await User.findById(userId);
-
-            if(!user){
-                  return  res.status(404).json({
-                  success:false,
-                  message:"user not found"
-            });
-            }
-
-            const lowStock = await Inventory.find({ isLowStock: true })
-                  .populate("product", "name category price images")
-                  .populate("updatedBy", "firstName lastName")
-                  .select("-movements")
-                  .sort({ currentStock: 1 }); 
-            
-            res.status(200).json({
-                  success: true,
-                  total: lowStock.length,
-                  inventory: lowStock,
-            });
-
-            const outOfStock = await Inventory.find({ isOutOfStock: true })
+            const outOfStock = await Inventory.find({ isoutOfStock: true })
                   .populate("product", "name category price images")
                   .populate("updatedBy", "firstName lastName")
                   .select("-movements")

@@ -1,8 +1,11 @@
 import bcrypt from "bcrypt";
 import User from "../models/UserModel.js";
 
+
 export const createWorker = async (req, res) => {
   try {
+    const adminId = req.user._id;
+
     const {
       employeeId,
       firstName,
@@ -16,19 +19,18 @@ export const createWorker = async (req, res) => {
       salary,
     } = req.body;
 
-    const adminId = req.user._id;
-
-    if (!employeeId || !firstName || !lastName || !workerRole || !password || !password) {
+    // fixed: removed duplicate !password check
+    if (!employeeId || !firstName || !lastName || !workerRole || !password) {
       return res.status(400).json({
         success: false,
-        message: "employeeId, name, workerRole and password are required",
+        message: "employeeId, firstName, lastName, workerRole and password are required",
       });
     }
 
     if (!email && !phone) {
       return res.status(400).json({
         success: false,
-        message: "Email or phone required",
+        message: "Email or phone is required",
       });
     }
 
@@ -53,21 +55,22 @@ export const createWorker = async (req, res) => {
     );
 
     const worker = await User.create({
-      role: "worker",
+      role:         "worker",
       workerRole,
       employeeId,
       firstName,
       lastName,
-      email: email || undefined,
-      phone: phone || undefined,
-      password: hashedPassword,
-      gender: gender || undefined,
-      address: address || undefined,
-      isVerified: true,
+      email:        email    || undefined,
+      phone:        phone    || undefined,
+      password:     hashedPassword,
+      gender:       gender   || undefined,
+      address:      address  || undefined,
+      salary:       salary   || undefined,
+      isVerified:   true,       // admin-created → already trusted
       registeredBy: adminId,
-      salary,
     });
 
+    // never send the password back in the response
     const { password: _, ...workerData } = worker.toObject();
 
     res.status(201).json({
@@ -84,38 +87,45 @@ export const createWorker = async (req, res) => {
   }
 };
 
+
 export const updateWorkerByWorker = async (req, res) => {
   try {
+    const userId = req.user._id;
+
+    // email intentionally excluded — workers cannot change their own email
+    // without verification (security risk — use a dedicated change-email flow)
     const {
       firstName,
       lastName,
-      email,
       phone,
       gender,
       address,
     } = req.body;
 
-    const userId = req.user._id;
-
-    if (!userId) {
+    if (!Object.keys(req.body).length) {
       return res.status(400).json({
         success: false,
-        message: "Login to update details",
+        message: "Provide at least one field to update",
       });
     }
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        firstName,
-        lastName,
-        email,
-        phone,
-        gender,
-        address,
-      },
-      { new: true, runValidators: true }
-    );
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Worker not found",
+      });
+    }
+
+    // only update fields that were actually sent — never overwrite with undefined
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName  !== undefined) user.lastName  = lastName;
+    if (phone     !== undefined) user.phone     = phone;
+    if (gender    !== undefined) user.gender    = gender;
+    if (address   !== undefined) user.address   = address;
+
+    await user.save();
 
     res.status(200).json({
       success: true,
@@ -123,7 +133,7 @@ export const updateWorkerByWorker = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.error("Failed to update worker details", error);
+    console.error("updateWorkerByWorker error:", error);
     res.status(500).json({
       success: false,
       message: "Worker details failed to update",
@@ -131,22 +141,15 @@ export const updateWorkerByWorker = async (req, res) => {
   }
 };
 
+
 export const deleteWorkerByAdmin = async (req, res) => {
   try {
-    const userId = req.user._id;
     const { employeeId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User not logged in",
-      });
-    }
 
     if (!employeeId) {
       return res.status(400).json({
         success: false,
-        message: "employeeId required",
+        message: "employeeId is required",
       });
     }
 
@@ -159,25 +162,23 @@ export const deleteWorkerByAdmin = async (req, res) => {
       });
     }
 
-    // 🔥 SOFT DELETE INSTEAD OF HARD DELETE
     employee.isDeleted = true;
-    employee.isActive = false;
-
+    employee.isActive  = false;
     await employee.save();
 
     res.status(200).json({
       success: true,
       message: "Employee deactivated successfully",
     });
-
   } catch (error) {
-    console.error("Soft delete error:", error);
+    console.error("deleteWorkerByAdmin error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to deactivate employee",
     });
   }
 };
+
 
 export const updateWorkerByAdmin = async (req, res) => {
   try {
@@ -189,19 +190,17 @@ export const updateWorkerByAdmin = async (req, res) => {
       salary,
     } = req.body;
 
-    const adminId = req.user._id;
-
-    if (!adminId) {
-      return res.status(400).json({
-        success: false,
-        message: "Login to update details",
-      });
-    }
-
     if (!employeeId) {
       return res.status(400).json({
         success: false,
-        message: "employeeId required to identify the target worker",
+        message: "employeeId is required to identify the target worker",
+      });
+    }
+
+    if (!Object.keys(req.body).filter((k) => k !== "employeeId").length) {
+      return res.status(400).json({
+        success: false,
+        message: "Provide at least one field to update",
       });
     }
 
@@ -214,24 +213,21 @@ export const updateWorkerByAdmin = async (req, res) => {
       });
     }
 
-    const user = await User.findByIdAndUpdate(
-      worker._id,
-      {
-        isActive,
-        isDeleted,
-        workerRole,
-        salary,
-      },
-      { new: true, runValidators: true }
-    );
+    // only update fields that were actually sent
+    if (isActive    !== undefined) worker.isActive    = isActive;
+    if (isDeleted   !== undefined) worker.isDeleted   = isDeleted;
+    if (workerRole  !== undefined) worker.workerRole  = workerRole;
+    if (salary      !== undefined) worker.salary      = salary;
+
+    await worker.save();
 
     res.status(200).json({
       success: true,
       message: "Worker details updated successfully",
-      user,
+      user: worker,
     });
   } catch (error) {
-    console.error("Failed to update worker details", error);
+    console.error("updateWorkerByAdmin error:", error);
     res.status(500).json({
       success: false,
       message: "Worker details failed to update",

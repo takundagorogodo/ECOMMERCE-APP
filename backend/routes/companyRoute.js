@@ -6,11 +6,11 @@ import { authenticate } from "../middlewares/authMiddleware.js";
 const router = express.Router();
 
 
-router.delete("/delete:/companyId", authenticate, allowRoles("admin"),deleteCompany);
-router.patch("/:companyId/remove-use",authenticate,allowRoles("admin"),removeUserFromCompany);
+router.delete("/delete/:companyId", authenticate, allowRoles("admin"),deleteCompany);
+router.patch("/:companyId/remove-user",authenticate,allowRoles("admin"),removeUserFromCompany);
 router.patch("/update/:companyId",authenticate,allowRoles("admin"),updateCompany);
 router.get("/:companyId",authenticate,allowRoles("admin"),getCompany);
 router.post("/create",authenticate,allowRoles("admin"),createCompany);
-router.patch("/company/:companyId/add-user",authenticate,allowRoles("admin"),addUserToCompany);
+router.patch("/:companyId/add-user",authenticate,allowRoles("admin"),addUserToCompany);
 
 export default router;

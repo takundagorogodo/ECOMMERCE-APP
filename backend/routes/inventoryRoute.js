@@ -7,10 +7,10 @@ import { createInventory, getAllInventory, getInventory, getLowStock, updateStoc
 const router = express.Router();
 
 router.post("/create",authenticate,allowRoles("admin","worker"),createInventory);
-router.get("/:productId",authenticate,allowRoles("worker","admin"),getInventory);
-router.get("/",authenticate,allowRoles("admin","worker"),getAllInventory);
-router.patch("/update-stock",authenticate,allowRoles("worker","admin",updateStock));
 router.get("/low-stock",authenticate,allowRoles("worker","admin"),getLowStock);
 router.get("/out-of-stock",authenticate,allowRoles("admin","worker"),getOutOfStock);
+router.get("/",authenticate,allowRoles("admin","worker"),getAllInventory);
+router.get("/:productId",authenticate,allowRoles("worker","admin"),getInventory);
+router.patch("/update-stock",authenticate,allowRoles("worker","admin"),updateStock);
 
 export default router;

@@ -63,6 +63,11 @@ const userSchema = new mongoose.Schema(
                   },
             ],
             orderHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],
+            company: {
+                  type: mongoose.Schema.Types.ObjectId,
+                  ref: "Company",
+                  default: null,
+            },
 
             // ── Shared identity ───────────────────────────────────
             firstName: { type: String, trim: true },
@@ -94,12 +99,11 @@ const userSchema = new mongoose.Schema(
 );
 
 // Only one admin allowed
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function () {
       if (this.role === "admin" && this.isNew) {
             const exists = await mongoose.model("User").findOne({ role: "admin" });
-            if (exists) return next(new Error("An admin already exists."));
+            if (exists) throw new Error("An admin already exists.");
       }
-      next;
 });
 
 export default mongoose.model("User", userSchema);

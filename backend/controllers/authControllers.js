@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import User from "../models/UserModel.js";
 
+
 export const updateCustomerDetails = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -10,22 +11,36 @@ export const updateCustomerDetails = async (req, res) => {
       lastName,
       email,
       phone,
-      adress,
+      address, // fixed spelling
       gender,
     } = req.body;
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        firstName,
-        lastName,
-        email,
-        phone,
-        adress,
-        gender,
-      },
-      { new: true, runValidators: true }
-    );
+    // prevent empty update from clearing existing fields
+    if (!Object.keys(req.body).length) {
+      return res.status(400).json({
+        success: false,
+        message: "Provide at least one field to update",
+      });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // only update fields that were actually sent — never overwrite with undefined
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName  !== undefined) user.lastName  = lastName;
+    if (email     !== undefined) user.email     = email;
+    if (phone     !== undefined) user.phone     = phone;
+    if (address   !== undefined) user.address   = address;
+    if (gender    !== undefined) user.gender    = gender;
+
+    await user.save();
 
     res.status(200).json({
       success: true,
@@ -33,7 +48,7 @@ export const updateCustomerDetails = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.error("Failed to update user details", error);
+    console.error("updateCustomerDetails error:", error);
     res.status(500).json({
       success: false,
       message: "User details update failed",
@@ -41,23 +56,14 @@ export const updateCustomerDetails = async (req, res) => {
   }
 };
 
+
 export const deleteCustomerAccount = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User not logged in",
-      });
-    }
-
     const user = await User.findByIdAndUpdate(
       userId,
-      {
-        isDeleted: true,
-        isActive: false,
-      },
+      { isDeleted: true, isActive: false },
       { new: true }
     );
 
@@ -72,9 +78,8 @@ export const deleteCustomerAccount = async (req, res) => {
       success: true,
       message: "Account deactivated successfully",
     });
-
   } catch (error) {
-    console.error("Soft delete error:", error);
+    console.error("deleteCustomerAccount error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to deactivate account",
@@ -84,16 +89,8 @@ export const deleteCustomerAccount = async (req, res) => {
 
 export const changePassword = async (req, res) => {
   try {
-    const { password, confirmPasword } = req.body;
-
     const userId = req.user._id;
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "Login to change password",
-      });
-    }
+    const { password, confirmPasword } = req.body;
 
     if (!password || !confirmPasword) {
       return res.status(400).json({
@@ -125,13 +122,14 @@ export const changePassword = async (req, res) => {
       message: "Password changed successfully",
     });
   } catch (error) {
-    console.error("Failed to change password", error);
+    console.error("changePassword error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to change password",
     });
   }
 };
+
 
 export const updateAdmin = async (req, res) => {
   try {
@@ -142,29 +140,35 @@ export const updateAdmin = async (req, res) => {
       lastName,
       phone,
       email,
-      adress,
+      address, // fixed spelling
       gender,
     } = req.body;
 
-    if (!userId) {
+    if (!Object.keys(req.body).length) {
       return res.status(400).json({
         success: false,
-        message: "Login to update details",
+        message: "Provide at least one field to update",
       });
     }
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        firstName,
-        lastName,
-        email,
-        phone,
-        adress,
-        gender,
-      },
-      { new: true, runValidators: true }
-    );
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // only update fields that were actually sent
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName  !== undefined) user.lastName  = lastName;
+    if (email     !== undefined) user.email     = email;
+    if (phone     !== undefined) user.phone     = phone;
+    if (address   !== undefined) user.address   = address;
+    if (gender    !== undefined) user.gender    = gender;
+
+    await user.save();
 
     res.status(200).json({
       success: true,
@@ -172,7 +176,7 @@ export const updateAdmin = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.error("Failed to update admin details", error);
+    console.error("updateAdmin error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update admin user",
@@ -180,26 +184,20 @@ export const updateAdmin = async (req, res) => {
   }
 };
 
+
 export const deleteCustomerByAdmin = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { customerEmail} = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User not logged in",
-      });
-    }
+    const { customerEmail } = req.body;
 
     if (!customerEmail) {
       return res.status(400).json({
         success: false,
-        message: "employeeId required",
+        message: "Customer email is required",
       });
     }
 
-    const customer = await User.findOne({customerEmail});
+    // fixed: query by email field, not a non-existent customerEmail field
+    const customer = await User.findOne({ email: customerEmail });
 
     if (!customer) {
       return res.status(404).json({
@@ -208,23 +206,27 @@ export const deleteCustomerByAdmin = async (req, res) => {
       });
     }
 
-    // 🔥 SOFT DELETE INSTEAD OF HARD DELETE
-    customer.isDeleted = true;
-    customer.isActive = false;
+    // prevent admin from accidentally deactivating another admin
+    if (customer.role === "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot deactivate an admin account this way",
+      });
+    }
 
+    customer.isDeleted = true;
+    customer.isActive  = false;
     await customer.save();
 
     res.status(200).json({
       success: true,
-      message: "customer deactivated successfully",
+      message: "Customer deactivated successfully",
     });
-
   } catch (error) {
-    console.error("Soft delete error:", error);
+    console.error("deleteCustomerByAdmin error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to deactivate customer",
     });
   }
 };
-

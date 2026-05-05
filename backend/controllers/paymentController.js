@@ -221,7 +221,7 @@ export const getPayment = async (req, res) => {
       });
     }
 
-    if (!isAdmin) {
+    if (!isAdmin && payment.gateway) {
       payment.gateway.gatewayResponse = undefined;
     }
 
@@ -364,7 +364,7 @@ export const refundPayment = async (req, res) => {
       });
     }
 
-    if (payment.refund.amount !== null) {
+    if (payment.refund?.amount !== null) {
       return res.status(400).json({
         success: false,
         message: "This payment has already been refunded",
@@ -382,7 +382,7 @@ export const refundPayment = async (req, res) => {
     payment.refund       = {
       amount:     refundAmount,
       reason:     reason || "No reason provided",
-      refundedAt: null,
+      refundedAt: new Date(),
     };
 
     await payment.save();
@@ -397,7 +397,7 @@ export const refundPayment = async (req, res) => {
 
     await Notification.create({
       user:    payment.user,
-      type:    "payment_success", 
+      type:    "general",
       title:   "Refund initiated",
       message: `A refund of ${payment.currency} ${(refundAmount / 100).toFixed(2)} for order #${payment.order} has been initiated. It may take 3-7 business days to reflect.`,
       reference: {
